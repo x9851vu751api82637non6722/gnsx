@@ -1359,41 +1359,50 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     label.ZIndex = 15
     label.Parent = labelBg
 
-    -- Content (parent dos elementos)
+    -- Body: SEM UIListLayout (lista e overlay se sobrepoem, AutomaticSize pega o max)
+    local body = Instance.new("Frame")
+    body.Name = "Body"
+    body.BackgroundTransparency = 1
+    body.Size = UDim2.new(1, 0, 0, 0)
+    body.AutomaticSize = Enum.AutomaticSize.Y
+    body.ClipsDescendants = true
+    body.LayoutOrder = 2
+    body.ZIndex = 12
+    body.Parent = sectionFrame
+
+    -- Lista real dos elementos (API .Content aponta pra ca)
     local content = Instance.new("Frame")
     content.Name = "Content"
     content.BackgroundTransparency = 1
     content.Size = UDim2.new(1, 0, 0, 0)
     content.AutomaticSize = Enum.AutomaticSize.Y
-    content.ClipsDescendants = true
-    content.LayoutOrder = 2
+    content.ClipsDescendants = false
     content.ZIndex = 12
-    content.Parent = sectionFrame
+    content.Parent = body
 
     local contentLayout = Instance.new("UIListLayout")
     contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
     contentLayout.Padding = UDim.new(0, self:S(8))
     contentLayout.Parent = content
 
-    -- Overlay preto (so aparece quando Locked = true)
-    -- NAO passa por CreateCorner com transparency do Config pra nao sobrescrever
+    -- Overlay: irmao do Content, Position 0,0 — NAO entra em UIListLayout
+    -- Altura em OFFSET sincronizada com Content (evita esticar o scroll)
     local overlay = Instance.new("Frame")
     overlay.Name = "LockOverlay"
     overlay.BackgroundColor3 = Color3.new(0, 0, 0)
     overlay.BackgroundTransparency = wantLocked and 0.5 or 1
     overlay.BorderSizePixel = 0
-    overlay.Size = UDim2.new(1, 0, 1, 0)
     overlay.Position = UDim2.new(0, 0, 0, 0)
+    overlay.Size = UDim2.new(1, 0, 0, 0) -- altura sobe via AbsoluteSize do content
     overlay.ZIndex = 100
     overlay.Visible = wantLocked
     overlay.Active = wantLocked
-    overlay.Parent = content
+    overlay.Parent = body
 
     local overlayCorner = Instance.new("UICorner")
     overlayCorner.CornerRadius = UDim.new(0, 6)
     overlayCorner.Parent = overlay
 
-    -- Cadeado GRANDE no centro do overlay (nao no titulo)
     local lockSize = self:S(56)
     local lockIcon = Instance.new("ImageLabel")
     lockIcon.Name = "LockIcon"
@@ -1408,12 +1417,25 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     lockIcon.ZIndex = 101
     lockIcon.Parent = overlay
 
+    local function syncOverlaySize()
+        local h = content.AbsoluteSize.Y
+        if h < 1 then h = 0 end
+        overlay.Size = UDim2.new(1, 0, 0, h)
+    end
+
+    content:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncOverlaySize)
+    contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        task.defer(syncOverlaySize)
+    end)
+    task.defer(syncOverlaySize)
+
     local isLocked = wantLocked
 
     local function setLocked(state, instant)
         state = state == true
         if isLocked == state and not instant then return end
         isLocked = state
+        syncOverlaySize()
 
         if state then
             overlay.Visible = true
