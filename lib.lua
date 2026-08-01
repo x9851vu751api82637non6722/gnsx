@@ -1188,28 +1188,97 @@ end
 
 -- --- CREATE SECTION -----------------------------------------------------------
 function GenesisX:CreateSection(parent, textOrConfig, color, icon)
-    -- Compat: CreateSection(parent, "Titulo", color, icon)
-    -- Novo:    CreateSection(parent, { Text = "...", Icon = "...", Locked = true })
-    local config
-    if type(textOrConfig) == "table" then
-        config = textOrConfig
+    -- Compat antigo: CreateSection(parent, "Titulo", color, icon)  -> so o header
+    -- Novo:          CreateSection(parent, { Text, Icon, Locked }) -> container + Content
+    -- Locked e OPCIONAL: nil/false = desbloqueada (comportamento normal)
+    local isConfig = type(textOrConfig) == "table"
+    local text, iconName, wantLocked
+
+    if isConfig then
+        text       = textOrConfig.Text or "Section"
+        iconName   = textOrConfig.Icon
+        wantLocked = textOrConfig.Locked == true
     else
-        config = {
-            Text  = textOrConfig or "Section",
-            Color = color,
-            Icon  = icon,
-        }
+        text       = textOrConfig or "Section"
+        iconName   = icon
+        wantLocked = false
     end
 
-    local text      = config.Text or "Section"
-    local icon      = config.Icon
-    local locked    = config.Locked == true
     local accentCol = self.Theme.Accent
     local iconSize  = self:S(16)
     local headerH   = self:S(28)
     local lockAsset = "rbxassetid://10723434711"
 
-    -- Outer container (cresce com o conteúdo)
+    -- ========== MODO ANTIGO (so header, 100% compativel) ==========
+    if not isConfig then
+        local wrap = Instance.new("Frame")
+        wrap.Name = "Section_" .. text
+        wrap.BackgroundTransparency = 1
+        wrap.Size = UDim2.new(1, 0, 0, headerH)
+        wrap.ZIndex = 12
+        wrap.Parent = parent
+
+        local line = Instance.new("Frame")
+        line.Name = "Line"
+        line.BackgroundColor3 = accentCol
+        line.BackgroundTransparency = 0.7
+        line.BorderSizePixel = 0
+        line.Position = UDim2.new(0, 0, 0.5, 0)
+        line.Size = UDim2.new(1, 0, 0, 1)
+        line.ZIndex = 11
+        line.Parent = wrap
+
+        local labelBg = Instance.new("Frame")
+        labelBg.Name = "LabelBg"
+        labelBg.BackgroundColor3 = self.Theme.Background
+        labelBg.BorderSizePixel = 0
+        labelBg.AutomaticSize = Enum.AutomaticSize.X
+        labelBg.Position = UDim2.new(0, self:S(6), 0, 0)
+        labelBg.Size = UDim2.new(0, 0, 1, 0)
+        labelBg.ZIndex = 13
+        labelBg.Parent = wrap
+
+        local layout = Instance.new("UIListLayout")
+        layout.FillDirection = Enum.FillDirection.Horizontal
+        layout.VerticalAlignment = Enum.VerticalAlignment.Center
+        layout.Padding = UDim.new(0, self:S(5))
+        layout.Parent = labelBg
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft  = UDim.new(0, self:S(4))
+        pad.PaddingRight = UDim.new(0, self:S(6))
+        pad.Parent = labelBg
+
+        if iconName then
+            local assetId = self:FormatAssetId(iconName)
+            if assetId then
+                local img = Instance.new("ImageLabel")
+                img.Name = "Icon"
+                img.BackgroundTransparency = 1
+                img.Size = UDim2.fromOffset(iconSize, iconSize)
+                img.Image = assetId
+                img.ImageColor3 = accentCol
+                img.ZIndex = 14
+                img.Parent = labelBg
+            end
+        end
+
+        local label = Instance.new("TextLabel")
+        label.Name = "Label"
+        label.BackgroundTransparency = 1
+        label.AutomaticSize = Enum.AutomaticSize.X
+        label.Size = UDim2.new(0, 0, 1, 0)
+        label.Font = self:GetFontBold()
+        label.Text = text
+        label.TextColor3 = accentCol
+        label.TextSize = self:S(11)
+        label.ZIndex = 14
+        label.Parent = labelBg
+
+        return wrap
+    end
+
+    -- ========== MODO NOVO (config table: Content + Locked opcional) ==========
     local sectionFrame = Instance.new("Frame")
     sectionFrame.Name = "Section_" .. text
     sectionFrame.BackgroundTransparency = 1
@@ -1224,7 +1293,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     mainLayout.Padding = UDim.new(0, self:S(6))
     mainLayout.Parent = sectionFrame
 
-    -- --- HEADER (igual ao antigo) ---------------------------------------------
+    -- Header
     local wrap = Instance.new("Frame")
     wrap.Name = "Header"
     wrap.BackgroundTransparency = 1
@@ -1264,8 +1333,8 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     pad.PaddingRight = UDim.new(0, self:S(6))
     pad.Parent = labelBg
 
-    if icon then
-        local assetId = self:FormatAssetId(icon)
+    if iconName then
+        local assetId = self:FormatAssetId(iconName)
         if assetId then
             local img = Instance.new("ImageLabel")
             img.Name = "Icon"
@@ -1290,19 +1359,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     label.ZIndex = 15
     label.Parent = labelBg
 
-    -- Badge de cadeado no header (aparece só quando locked)
-    local lockBadge = Instance.new("ImageLabel")
-    lockBadge.Name = "LockBadge"
-    lockBadge.BackgroundTransparency = 1
-    lockBadge.Size = UDim2.fromOffset(self:S(14), self:S(14))
-    lockBadge.Image = lockAsset
-    lockBadge.ImageColor3 = self.Theme.TextMuted
-    lockBadge.ImageTransparency = locked and 0 or 1
-    lockBadge.Visible = locked
-    lockBadge.ZIndex = 15
-    lockBadge.Parent = labelBg
-
-    -- --- CONTENT AREA -------------------------------------------------------
+    -- Content (parent dos elementos)
     local content = Instance.new("Frame")
     content.Name = "Content"
     content.BackgroundTransparency = 1
@@ -1318,46 +1375,40 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     contentLayout.Padding = UDim.new(0, self:S(8))
     contentLayout.Parent = content
 
-    -- --- LOCK OVERLAY -------------------------------------------------------
+    -- Overlay preto (so aparece quando Locked = true)
+    -- NAO passa por CreateCorner com transparency do Config pra nao sobrescrever
     local overlay = Instance.new("Frame")
     overlay.Name = "LockOverlay"
     overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-    overlay.BackgroundTransparency = locked and 0.5 or 1
+    overlay.BackgroundTransparency = wantLocked and 0.5 or 1
     overlay.BorderSizePixel = 0
     overlay.Size = UDim2.new(1, 0, 1, 0)
     overlay.Position = UDim2.new(0, 0, 0, 0)
-    overlay.ZIndex = 40
-    overlay.Visible = locked
-    overlay.Active = locked          -- bloqueia cliques quando locked
+    overlay.ZIndex = 100
+    overlay.Visible = wantLocked
+    overlay.Active = wantLocked
     overlay.Parent = content
-    self:CreateCorner(overlay, UDim.new(0, 6))
 
+    local overlayCorner = Instance.new("UICorner")
+    overlayCorner.CornerRadius = UDim.new(0, 6)
+    overlayCorner.Parent = overlay
+
+    -- Cadeado GRANDE no centro do overlay (nao no titulo)
+    local lockSize = self:S(56)
     local lockIcon = Instance.new("ImageLabel")
     lockIcon.Name = "LockIcon"
     lockIcon.BackgroundTransparency = 1
     lockIcon.AnchorPoint = Vector2.new(0.5, 0.5)
     lockIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-    lockIcon.Size = UDim2.fromOffset(self:S(32), self:S(32))
+    lockIcon.Size = UDim2.fromOffset(lockSize, lockSize)
     lockIcon.Image = lockAsset
-    lockIcon.ImageColor3 = Color3.fromRGB(220, 220, 230)
-    lockIcon.ImageTransparency = locked and 0 or 1
-    lockIcon.ZIndex = 41
+    lockIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+    lockIcon.ImageTransparency = wantLocked and 0 or 1
+    lockIcon.ScaleType = Enum.ScaleType.Fit
+    lockIcon.ZIndex = 101
     lockIcon.Parent = overlay
 
-    -- Glow sutil atrás do cadeado
-    local lockGlow = Instance.new("Frame")
-    lockGlow.Name = "LockGlow"
-    lockGlow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    lockGlow.BackgroundTransparency = locked and 0.6 or 1
-    lockGlow.BorderSizePixel = 0
-    lockGlow.AnchorPoint = Vector2.new(0.5, 0.5)
-    lockGlow.Position = UDim2.new(0.5, 0, 0.5, 0)
-    lockGlow.Size = UDim2.fromOffset(self:S(52), self:S(52))
-    lockGlow.ZIndex = 40
-    lockGlow.Parent = overlay
-    self:CreateCorner(lockGlow, UDim.new(1, 0))
-
-    local isLocked = locked
+    local isLocked = wantLocked
 
     local function setLocked(state, instant)
         state = state == true
@@ -1365,74 +1416,45 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
         isLocked = state
 
         if state then
-            -- Travar
             overlay.Visible = true
             overlay.Active = true
-            lockBadge.Visible = true
             if instant then
                 overlay.BackgroundTransparency = 0.5
                 lockIcon.ImageTransparency = 0
-                lockGlow.BackgroundTransparency = 0.6
-                lockBadge.ImageTransparency = 0
             else
                 overlay.BackgroundTransparency = 1
                 lockIcon.ImageTransparency = 1
-                lockGlow.BackgroundTransparency = 1
-                lockBadge.ImageTransparency = 1
                 self:Tween(overlay, { BackgroundTransparency = 0.5 }, 0.3)
                 self:Tween(lockIcon, { ImageTransparency = 0 }, 0.35)
-                self:Tween(lockGlow, { BackgroundTransparency = 0.6 }, 0.35)
-                self:Tween(lockBadge, { ImageTransparency = 0 }, 0.25)
             end
         else
-            -- Destravar (fade out)
             overlay.Active = false
             if instant then
                 overlay.BackgroundTransparency = 1
                 lockIcon.ImageTransparency = 1
-                lockGlow.BackgroundTransparency = 1
-                lockBadge.ImageTransparency = 1
                 overlay.Visible = false
-                lockBadge.Visible = false
             else
                 self:Tween(overlay, { BackgroundTransparency = 1 }, 0.3)
                 self:Tween(lockIcon, { ImageTransparency = 1 }, 0.25)
-                self:Tween(lockGlow, { BackgroundTransparency = 1 }, 0.25)
-                self:Tween(lockBadge, { ImageTransparency = 1 }, 0.2)
                 task.delay(0.32, function()
                     if overlay and overlay.Parent and not isLocked then
                         overlay.Visible = false
-                        lockBadge.Visible = false
                     end
                 end)
             end
         end
     end
 
-    -- Compatibilidade: se o usuário ainda usar o estilo antigo (sem Locked e sem config table),
-    -- o Content fica vazio e o retorno principal continua sendo o header (wrap).
-    -- Quando Locked ou config table é usada, o ideal é parentar elementos em .Content
-    local api = {
-        Frame      = sectionFrame,
-        Header     = wrap,
-        Content    = content,          -- parentar toggles/buttons/etc aqui
-        Overlay    = overlay,
-        IsLocked   = function() return isLocked end,
-        SetLocked  = function(v, instant) setLocked(v, instant) end,
-        Unlock     = function(instant) setLocked(false, instant) end,
-        Lock       = function(instant) setLocked(true, instant) end,
+    return {
+        Frame     = sectionFrame,
+        Header    = wrap,
+        Content   = content,
+        Overlay   = overlay,
+        IsLocked  = function() return isLocked end,
+        SetLocked = function(v, instant) setLocked(v, instant) end,
+        Unlock    = function(instant) setLocked(false, instant) end,
+        Lock      = function(instant) setLocked(true, instant) end,
     }
-
-    -- Para não quebrar scripts antigos que esperam o Frame do header:
-    -- se NÃO passou config table e NÃO pediu Locked, retorna só o wrap (comportamento antigo)
-    if type(textOrConfig) ~= "table" and config.Locked == nil then
-        -- move o header de volta para o parent original e descarta o container
-        wrap.Parent = parent
-        sectionFrame:Destroy()
-        return wrap
-    end
-
-    return api
 end
 
 -- --- CREATE TOGGLE ------------------------------------------------------------
