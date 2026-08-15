@@ -1208,8 +1208,8 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     end
 
     local accentCol = self.Theme.Accent
-    local iconSize  = self:S(18)          -- maior
-    local headerH   = self:S(34)          -- mais alto = mais respiro
+    local iconSize  = self:S(20)          -- maior
+    local headerH   = self:S(36)          -- mais alto = mais respiro
     local lockAsset = "rbxassetid://10723434711"
 
     -- ========== MODO ANTIGO (so header, 100% compatível) ==========
@@ -1265,7 +1265,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
         label.Font = self:GetFontBold()
         label.Text = text
         label.TextColor3 = accentCol
-        label.TextSize = self:S(13)       -- maior
+        label.TextSize = self:S(14)       -- maior
         label.ZIndex = 14
         label.Parent = labelBg
 
@@ -1339,7 +1339,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     label.Font = self:GetFontBold()
     label.Text = text
     label.TextColor3 = accentCol
-    label.TextSize = self:S(13)           -- maior
+    label.TextSize = self:S(14)           -- maior
     label.ZIndex = 15
     label.Parent = labelBg
 
@@ -1348,8 +1348,8 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     chevron.Name = "Chevron"
     chevron.BackgroundTransparency = 1
     chevron.AnchorPoint = Vector2.new(1, 0.5)
-    chevron.Position = UDim2.new(1, -self:S(8), 0.5, 0)
-    chevron.Size = UDim2.fromOffset(self:S(16), self:S(16))
+    chevron.Position = UDim2.new(1, -self:S(10), 0.5, 0)
+    chevron.Size = UDim2.fromOffset(self:S(14), self:S(14))  -- menor que o texto
     chevron.Image = self:FormatAssetId("lucide-chevron-down") or ""
     chevron.ImageColor3 = accentCol
     chevron.Rotation = startClosed and 180 or 0
