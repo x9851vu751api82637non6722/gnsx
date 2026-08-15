@@ -12,7 +12,7 @@ local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- --- ICONES LUCIDE / SPECTRUMX ----------------------------------------------
+-- --- ICONES LUCIDE / GENESIS X ----------------------------------------------
 local LucideAssets = {}
 pcall(function()
     local raw = loadstring(game:HttpGet(
@@ -1189,27 +1189,30 @@ end
 -- --- CREATE SECTION -----------------------------------------------------------
 function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     -- Compat antigo: CreateSection(parent, "Titulo", color, icon)  -> so o header
-    -- Novo:          CreateSection(parent, { Text, Icon, Locked }) -> container + Content
-    -- Locked e OPCIONAL: nil/false = desbloqueada (comportamento normal)
+    -- Novo:          CreateSection(parent, { Text, Icon, Locked, Closed }) -> container + Content
+    -- Locked  = true → bloqueia interação (overlay com cadeado)
+    -- Closed  = true → começa fechada (colapsada). Padrão = aberta
     local isConfig = type(textOrConfig) == "table"
-    local text, iconName, wantLocked
+    local text, iconName, wantLocked, startClosed
 
     if isConfig then
-        text       = textOrConfig.Text or "Section"
-        iconName   = textOrConfig.Icon
-        wantLocked = textOrConfig.Locked == true
+        text        = textOrConfig.Text or "Section"
+        iconName    = textOrConfig.Icon
+        wantLocked  = textOrConfig.Locked == true
+        startClosed = textOrConfig.Closed == true
     else
-        text       = textOrConfig or "Section"
-        iconName   = icon
-        wantLocked = false
+        text        = textOrConfig or "Section"
+        iconName    = icon
+        wantLocked  = false
+        startClosed = false
     end
 
     local accentCol = self.Theme.Accent
-    local iconSize  = self:S(16)
-    local headerH   = self:S(28)
+    local iconSize  = self:S(18)          -- maior
+    local headerH   = self:S(34)          -- mais alto = mais respiro
     local lockAsset = "rbxassetid://10723434711"
 
-    -- ========== MODO ANTIGO (so header, 100% compativel) ==========
+    -- ========== MODO ANTIGO (so header, 100% compatível) ==========
     if not isConfig then
         local wrap = Instance.new("Frame")
         wrap.Name = "Section_" .. text
@@ -1218,22 +1221,13 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
         wrap.ZIndex = 12
         wrap.Parent = parent
 
-        local line = Instance.new("Frame")
-        line.Name = "Line"
-        line.BackgroundColor3 = accentCol
-        line.BackgroundTransparency = 0.7
-        line.BorderSizePixel = 0
-        line.Position = UDim2.new(0, 0, 0.5, 0)
-        line.Size = UDim2.new(1, 0, 0, 1)
-        line.ZIndex = 11
-        line.Parent = wrap
+        -- SEM linha horizontal
 
         local labelBg = Instance.new("Frame")
         labelBg.Name = "LabelBg"
-        labelBg.BackgroundColor3 = self.Theme.Background
-        labelBg.BorderSizePixel = 0
+        labelBg.BackgroundTransparency = 1
         labelBg.AutomaticSize = Enum.AutomaticSize.X
-        labelBg.Position = UDim2.new(0, self:S(6), 0, 0)
+        labelBg.Position = UDim2.new(0, self:S(4), 0, 0)
         labelBg.Size = UDim2.new(0, 0, 1, 0)
         labelBg.ZIndex = 13
         labelBg.Parent = wrap
@@ -1241,11 +1235,11 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
         local layout = Instance.new("UIListLayout")
         layout.FillDirection = Enum.FillDirection.Horizontal
         layout.VerticalAlignment = Enum.VerticalAlignment.Center
-        layout.Padding = UDim.new(0, self:S(5))
+        layout.Padding = UDim.new(0, self:S(8))   -- mais distância ícone ↔ texto
         layout.Parent = labelBg
 
         local pad = Instance.new("UIPadding")
-        pad.PaddingLeft  = UDim.new(0, self:S(4))
+        pad.PaddingLeft  = UDim.new(0, self:S(2))
         pad.PaddingRight = UDim.new(0, self:S(6))
         pad.Parent = labelBg
 
@@ -1271,14 +1265,14 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
         label.Font = self:GetFontBold()
         label.Text = text
         label.TextColor3 = accentCol
-        label.TextSize = self:S(11)
+        label.TextSize = self:S(13)       -- maior
         label.ZIndex = 14
         label.Parent = labelBg
 
         return wrap
     end
 
-    -- ========== MODO NOVO (config table: Content + Locked opcional) ==========
+    -- ========== MODO NOVO (config table: Content + Locked + Closed) ==========
     local sectionFrame = Instance.new("Frame")
     sectionFrame.Name = "Section_" .. text
     sectionFrame.BackgroundTransparency = 1
@@ -1290,34 +1284,24 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
 
     local mainLayout = Instance.new("UIListLayout")
     mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    mainLayout.Padding = UDim.new(0, self:S(6))
+    mainLayout.Padding = UDim.new(0, self:S(8))   -- mais espaço entre header e conteúdo
     mainLayout.Parent = sectionFrame
 
-    -- Header
+    -- Header (clicável para abrir/fechar)
     local wrap = Instance.new("Frame")
     wrap.Name = "Header"
     wrap.BackgroundTransparency = 1
     wrap.Size = UDim2.new(1, 0, 0, headerH)
     wrap.LayoutOrder = 1
     wrap.ZIndex = 13
+    wrap.Active = true
     wrap.Parent = sectionFrame
-
-    local line = Instance.new("Frame")
-    line.Name = "Line"
-    line.BackgroundColor3 = accentCol
-    line.BackgroundTransparency = 0.7
-    line.BorderSizePixel = 0
-    line.Position = UDim2.new(0, 0, 0.5, 0)
-    line.Size = UDim2.new(1, 0, 0, 1)
-    line.ZIndex = 12
-    line.Parent = wrap
 
     local labelBg = Instance.new("Frame")
     labelBg.Name = "LabelBg"
-    labelBg.BackgroundColor3 = self.Theme.Background
-    labelBg.BorderSizePixel = 0
+    labelBg.BackgroundTransparency = 1
     labelBg.AutomaticSize = Enum.AutomaticSize.X
-    labelBg.Position = UDim2.new(0, self:S(6), 0, 0)
+    labelBg.Position = UDim2.new(0, self:S(4), 0, 0)
     labelBg.Size = UDim2.new(0, 0, 1, 0)
     labelBg.ZIndex = 14
     labelBg.Parent = wrap
@@ -1325,11 +1309,11 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     local hLayout = Instance.new("UIListLayout")
     hLayout.FillDirection = Enum.FillDirection.Horizontal
     hLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    hLayout.Padding = UDim.new(0, self:S(5))
+    hLayout.Padding = UDim.new(0, self:S(8))     -- mais distância ícone ↔ texto
     hLayout.Parent = labelBg
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft  = UDim.new(0, self:S(4))
+    pad.PaddingLeft  = UDim.new(0, self:S(2))
     pad.PaddingRight = UDim.new(0, self:S(6))
     pad.Parent = labelBg
 
@@ -1355,11 +1339,24 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     label.Font = self:GetFontBold()
     label.Text = text
     label.TextColor3 = accentCol
-    label.TextSize = self:S(11)
+    label.TextSize = self:S(13)           -- maior
     label.ZIndex = 15
     label.Parent = labelBg
 
-    -- Body: SEM UIListLayout (lista e overlay se sobrepoem, AutomaticSize pega o max)
+    -- Chevron (indicador de aberto/fechado)
+    local chevron = Instance.new("ImageLabel")
+    chevron.Name = "Chevron"
+    chevron.BackgroundTransparency = 1
+    chevron.AnchorPoint = Vector2.new(1, 0.5)
+    chevron.Position = UDim2.new(1, -self:S(8), 0.5, 0)
+    chevron.Size = UDim2.fromOffset(self:S(16), self:S(16))
+    chevron.Image = self:FormatAssetId("lucide-chevron-down") or ""
+    chevron.ImageColor3 = accentCol
+    chevron.Rotation = startClosed and 180 or 0
+    chevron.ZIndex = 15
+    chevron.Parent = wrap
+
+    -- Body
     local body = Instance.new("Frame")
     body.Name = "Body"
     body.BackgroundTransparency = 1
@@ -1370,7 +1367,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     body.ZIndex = 12
     body.Parent = sectionFrame
 
-    -- Lista real dos elementos (API .Content aponta pra ca)
+    -- Lista real dos elementos (API .Content aponta pra cá)
     local content = Instance.new("Frame")
     content.Name = "Content"
     content.BackgroundTransparency = 1
@@ -1378,6 +1375,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     content.AutomaticSize = Enum.AutomaticSize.Y
     content.ClipsDescendants = false
     content.ZIndex = 12
+    content.Visible = not startClosed
     content.Parent = body
 
     local contentLayout = Instance.new("UIListLayout")
@@ -1385,15 +1383,14 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     contentLayout.Padding = UDim.new(0, self:S(8))
     contentLayout.Parent = content
 
-    -- Overlay: irmao do Content, Position 0,0 — NAO entra em UIListLayout
-    -- Altura em OFFSET sincronizada com Content (evita esticar o scroll)
+    -- Overlay de Locked
     local overlay = Instance.new("Frame")
     overlay.Name = "LockOverlay"
     overlay.BackgroundColor3 = Color3.new(0, 0, 0)
     overlay.BackgroundTransparency = wantLocked and 0.5 or 1
     overlay.BorderSizePixel = 0
     overlay.Position = UDim2.new(0, 0, 0, 0)
-    overlay.Size = UDim2.new(1, 0, 0, 0) -- altura sobe via AbsoluteSize do content
+    overlay.Size = UDim2.new(1, 0, 0, 0)
     overlay.ZIndex = 100
     overlay.Visible = wantLocked
     overlay.Active = wantLocked
@@ -1430,6 +1427,7 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     task.defer(syncOverlaySize)
 
     local isLocked = wantLocked
+    local isOpen   = not startClosed
 
     local function setLocked(state, instant)
         state = state == true
@@ -1467,15 +1465,67 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
         end
     end
 
+    local function setOpen(state, instant)
+        state = state == true
+        if isOpen == state and not instant then return end
+        isOpen = state
+
+        if state then
+            content.Visible = true
+            if instant then
+                chevron.Rotation = 0
+            else
+                self:Tween(chevron, { Rotation = 0 }, 0.25)
+            end
+        else
+            content.Visible = false
+            if instant then
+                chevron.Rotation = 180
+            else
+                self:Tween(chevron, { Rotation = 180 }, 0.25)
+            end
+        end
+
+        -- força atualização do overlay depois de mudar visibilidade
+        task.defer(syncOverlaySize)
+    end
+
+    -- Clique no header abre/fecha a seção
+    wrap.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            setOpen(not isOpen)
+        end
+    end)
+
+    -- Hover sutil no header
+    wrap.MouseEnter:Connect(function()
+        self:Tween(chevron, { ImageColor3 = self.Theme.AccentHover or accentCol }, 0.15)
+        self:Tween(label, { TextColor3 = self.Theme.AccentHover or accentCol }, 0.15)
+    end)
+    wrap.MouseLeave:Connect(function()
+        self:Tween(chevron, { ImageColor3 = accentCol }, 0.15)
+        self:Tween(label, { TextColor3 = accentCol }, 0.15)
+    end)
+
     return {
         Frame     = sectionFrame,
         Header    = wrap,
         Content   = content,
         Overlay   = overlay,
+
+        -- Locked API
         IsLocked  = function() return isLocked end,
         SetLocked = function(v, instant) setLocked(v, instant) end,
         Unlock    = function(instant) setLocked(false, instant) end,
         Lock      = function(instant) setLocked(true, instant) end,
+
+        -- Open / Close API (novo)
+        IsOpen    = function() return isOpen end,
+        SetOpen   = function(v, instant) setOpen(v, instant) end,
+        Open      = function(instant) setOpen(true, instant) end,
+        Close     = function(instant) setOpen(false, instant) end,
+        Toggle    = function(instant) setOpen(not isOpen, instant) end,
     }
 end
 
