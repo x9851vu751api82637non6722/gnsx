@@ -194,6 +194,7 @@ GenesisX.Config = {
     ShadowIntensity = 0.7,
     Transparency = 0,
     BorderEnabled = false,
+    GlassEffect = false,
 }
 
 -- --- INTERNAL SAVE/LOAD FOR THEME & FONT ------------------------------------
@@ -294,10 +295,15 @@ function GenesisX:CreateCorner(parent, radius)
 end
 
 function GenesisX:CreateStroke(parent, color, thickness, transparency)
-    if self.Config.BorderEnabled == false then return nil end
+    -- BorderEnabled ou GlassEffect permitem stroke
+    if self.Config.BorderEnabled == false and not self.Config.GlassEffect then return nil end
     local stroke = Instance.new("UIStroke")
     stroke.Color = color or self.Theme.Border
     stroke.Thickness = thickness or 1
+    -- Glass usa stroke mais suave por padrão
+    if transparency == nil and self.Config.GlassEffect then
+        transparency = 0.55
+    end
     stroke.Transparency = transparency or 0.5
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = parent
@@ -526,6 +532,24 @@ function GenesisX:CreateWindow(config)
     local savedTransparency = self:_LoadConfigFile("transparency.json", config.Transparency or 0)
     self.Config.Transparency = math.clamp(savedTransparency, 0, 1)
 
+    -- Shadow (pode ser desativado via config.Shadow = false)
+    if config.Shadow ~= nil then
+        self.Config.ShadowEnabled = config.Shadow == true
+    end
+
+    -- Glass Effect (aumenta transparência + visual mais "vidro")
+    if config.GlassEffect == true then
+        self.Config.GlassEffect = true
+        -- Se o usuário não passou Transparency manualmente, usa um valor de glass
+        if config.Transparency == nil then
+            self.Config.Transparency = math.max(self.Config.Transparency, 0.22)
+        end
+        -- Glass combina bem com sombra (não força BorderEnabled global)
+        self.Config.ShadowEnabled = true
+    else
+        self.Config.GlassEffect = false
+    end
+
     -- Override: if config explicitly set Theme/Font, use it and save
     local themeName = savedTheme
     if configTheme then
@@ -589,10 +613,18 @@ function GenesisX:CreateWindow(config)
     self.MainFrame.ZIndex = 10
     self.MainFrame.Parent = self.ScreenGui
     self:CreateCorner(self.MainFrame, UDim.new(0, 10))
-    if self.Config.BorderEnabled then
-        self:CreateStroke(self.MainFrame, self.Theme.Accent, 1.5, 0)
+    if self.Config.BorderEnabled or self.Config.GlassEffect then
+        -- Glass usa stroke mais suave e transparente
+        local strokeTrans = self.Config.GlassEffect and 0.55 or 0
+        local strokeThick = self.Config.GlassEffect and 1.2 or 1.5
+        self:CreateStroke(self.MainFrame, self.Theme.Accent, strokeThick, strokeTrans)
     end
     self.MainFrame.BackgroundTransparency = self.Config.Transparency
+
+    -- Sombra da janela principal
+    if self.Config.ShadowEnabled then
+        self:CreateShadow(self.MainFrame, 22, self.Config.ShadowIntensity)
+    end
 
     -- --- HEADER -----------------------------------------------------------------
     local headerHeight = self:S(56)
@@ -1352,7 +1384,9 @@ function GenesisX:CreateSection(parent, textOrConfig, color, icon)
     chevron.Size = UDim2.fromOffset(self:S(14), self:S(14))  -- menor que o texto
     chevron.Image = self:FormatAssetId("lucide-chevron-down") or ""
     chevron.ImageColor3 = accentCol
+    chevron.ImageTransparency = 0
     chevron.Rotation = startClosed and 180 or 0
+    chevron.Visible = true          -- sempre aparece (não depende de Closed)
     chevron.ZIndex = 15
     chevron.Parent = wrap
 
