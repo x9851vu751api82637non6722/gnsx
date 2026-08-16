@@ -1,3 +1,17 @@
+--[[
+  GenesisX UI Library
+  -----------------------
+  SideMode (optional):
+    local Window = GenesisX:CreateWindow({
+        Title = "My Hub",
+        SideMode = true,  -- enables side dock + chevron handle
+        -- rest of options work the same
+    })
+    -- Window:ToggleSide() / Window:SetSideExpanded(true|false)
+
+  Without SideMode the library behaves as before (centered window + float button).
+]]
+
 local GenesisX = {}
 GenesisX.__index = GenesisX
 
@@ -544,6 +558,9 @@ function GenesisX:CreateWindow(config)
         self.Theme = self.Themes.Dark
     end
 
+    -- SideMode: optional docked side panel UI (chevron handle + large side window)
+    self.SideMode = config.SideMode == true
+    self._sideExpanded = false
 
     if PlayerGui:FindFirstChild("GenesisX") then
         PlayerGui.GenesisX:Destroy()
@@ -574,21 +591,34 @@ function GenesisX:CreateWindow(config)
     self.Tabs = {}
     self.CurrentTab = nil
 
-    local windowWidth = ScaleData.IsMobile and self:S(440) or self:S(700)
-    local windowHeight = ScaleData.IsMobile and self:S(580) or self:S(460)
+    local windowWidth, windowHeight
+    if self.SideMode then
+        windowWidth = ScaleData.IsMobile and self:S(360) or self:S(420)
+        windowHeight = ScaleData.IsMobile and self:S(520) or self:S(560)
+    else
+        windowWidth = ScaleData.IsMobile and self:S(440) or self:S(700)
+        windowHeight = ScaleData.IsMobile and self:S(580) or self:S(460)
+    end
 
     self.MainFrame = Instance.new("Frame")
     self.MainFrame.Name = "MainFrame"
     self.MainFrame.BackgroundColor3 = self.Theme.Background
     self.MainFrame.BorderSizePixel = 0
-    self.MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    self.MainFrame.Position = config.Position or UDim2.new(0.5, 0, 0.5, 0)
+    if self.SideMode then
+        self.MainFrame.AnchorPoint = Vector2.new(1, 0.5)
+        self.MainFrame.Position = config.Position or UDim2.new(1, -56, 0.5, 0)
+        self.MainFrame.Visible = false -- starts collapsed; opened via side handle
+    else
+        self.MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+        self.MainFrame.Position = config.Position or UDim2.new(0.5, 0, 0.5, 0)
+        self.MainFrame.Visible = true
+    end
     self.MainFrame.Size = config.Size or UDim2.new(0, windowWidth, 0, windowHeight)
     self.MainFrame.Active = true
-    self.MainFrame.Visible = true
     self.MainFrame.ZIndex = 10
+    self.MainFrame.ClipsDescendants = true
     self.MainFrame.Parent = self.ScreenGui
-    self:CreateCorner(self.MainFrame, UDim.new(0, 10))
+    self:CreateCorner(self.MainFrame, UDim.new(0, 12))
     if self.Config.BorderEnabled then
         self:CreateStroke(self.MainFrame, self.Theme.Accent, 1.5, 0)
     end
@@ -739,7 +769,8 @@ function GenesisX:CreateWindow(config)
     end
 
     -- --- SIDEBAR ----------------------------------------------------------------
-    local sidebarWidth = self:S(64)
+    local sidebarWidth = self.SideMode and self:S(140) or self:S(64)
+    self._sidebarWidth = sidebarWidth
 
     local sidebarWrap = Instance.new("Frame")
     sidebarWrap.Name = "SidebarWrap"
@@ -779,12 +810,16 @@ function GenesisX:CreateWindow(config)
     local sidebarLayout = Instance.new("UIListLayout")
     sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
     sidebarLayout.Padding = UDim.new(0, self:S(8))
-    sidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    sidebarLayout.HorizontalAlignment = self.SideMode and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Center
     sidebarLayout.Parent = self.Sidebar
 
     local sidebarPadding = Instance.new("UIPadding")
     sidebarPadding.PaddingTop = UDim.new(0, self:S(12))
     sidebarPadding.PaddingBottom = UDim.new(0, self:S(12))
+    if self.SideMode then
+        sidebarPadding.PaddingLeft = UDim.new(0, self:S(10))
+        sidebarPadding.PaddingRight = UDim.new(0, self:S(10))
+    end
     sidebarPadding.Parent = self.Sidebar
 
     sidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -803,7 +838,11 @@ function GenesisX:CreateWindow(config)
     self.ContentArea.ClipsDescendants = true
     self.ContentArea.Parent = self.MainFrame
 
-    self:_CreateFloatingButton(config)
+    if self.SideMode then
+        self:_CreateSideHandle(config)
+    else
+        self:_CreateFloatingButton(config)
+    end
 
     UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or
@@ -819,8 +858,196 @@ function GenesisX:CreateWindow(config)
         end)
     end
 
-    self:MakeDraggable(self.MainFrame, self.Header)
+    if not self.SideMode then
+        self:MakeDraggable(self.MainFrame, self.Header)
+    end
     return window
+end
+
+-- --- SIDE MODE HANDLE -------------------------------------------------------
+function GenesisX:_CreateSideHandle(config)
+    config = config or {}
+    local HANDLE_W = self:S(36)
+    local HANDLE_H = self:S(96)
+    local EDGE_PAD = self:S(12)
+    local GAP = self:S(10)
+
+    self._sideHandleW = HANDLE_W
+    self._sideEdgePad = EDGE_PAD
+    self._sideGap = GAP
+    self._sideCenterY = 0.5
+
+    -- Floating chevron handle on the right edge
+    self.SideHandle = Instance.new("TextButton")
+    self.SideHandle.Name = "SideHandle"
+    self.SideHandle.BackgroundColor3 = self.Theme.Header
+    self.SideHandle.BorderSizePixel = 0
+    self.SideHandle.AnchorPoint = Vector2.new(1, 0.5)
+    self.SideHandle.Position = UDim2.new(1, -EDGE_PAD, self._sideCenterY, 0)
+    self.SideHandle.Size = UDim2.new(0, HANDLE_W, 0, HANDLE_H)
+    self.SideHandle.Text = ""
+    self.SideHandle.AutoButtonColor = false
+    self.SideHandle.ZIndex = 120
+    self.SideHandle.Parent = self.ScreenGui
+    self:CreateCorner(self.SideHandle, UDim.new(0, 10))
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "HandleStroke"
+    stroke.Color = self.Theme.Accent
+    stroke.Thickness = 1.4
+    stroke.Transparency = 0.3
+    stroke.Parent = self.SideHandle
+    self._sideHandleStroke = stroke
+
+    local chevron = Instance.new("ImageLabel")
+    chevron.Name = "Chevron"
+    chevron.BackgroundTransparency = 1
+    chevron.Size = UDim2.new(0, self:S(18), 0, self:S(18))
+    chevron.Position = UDim2.new(0.5, 0, 0.5, 0)
+    chevron.AnchorPoint = Vector2.new(0.5, 0.5)
+    chevron.Image = self:FormatAssetId("lucide-chevron-left") or "rbxassetid://6031091004"
+    chevron.ImageColor3 = self.Theme.Accent
+    chevron.ZIndex = 121
+    chevron.Parent = self.SideHandle
+    self._sideChevron = chevron
+
+    -- Position MainFrame relative to handle when expanded
+    local function placePanel()
+        if not self.MainFrame then return end
+        local offset = EDGE_PAD + HANDLE_W + GAP
+        self.MainFrame.Position = UDim2.new(1, -offset, self._sideCenterY, 0)
+    end
+
+    function self:SetSideExpanded(state)
+        self._sideExpanded = state and true or false
+        if not self.MainFrame then return end
+
+        if self._sideExpanded then
+            placePanel()
+            self.MainFrame.Visible = true
+            -- expand from zero width feel
+            local targetSize = self.MainFrame.Size
+            local w = targetSize.X.Offset
+            local h = targetSize.Y.Offset
+            if w <= 0 then w = self:S(420) end
+            if h <= 0 then h = self:S(560) end
+            self.MainFrame.Size = UDim2.new(0, 0, 0, h)
+            self:Tween(self.MainFrame, {
+                Size = UDim2.new(0, w, 0, h)
+            }, 0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+            if self._sideChevron then
+                self:Tween(self._sideChevron, {Rotation = 180}, 0.28)
+            end
+            if self._sideHandleStroke then
+                self._sideHandleStroke.Transparency = 0.12
+            end
+        else
+            local h = self.MainFrame.Size.Y.Offset
+            self:Tween(self.MainFrame, {
+                Size = UDim2.new(0, 0, 0, h)
+            }, 0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            if self._sideChevron then
+                self:Tween(self._sideChevron, {Rotation = 0}, 0.28)
+            end
+            if self._sideHandleStroke then
+                self._sideHandleStroke.Transparency = 0.3
+            end
+            task.delay(0.3, function()
+                if self.MainFrame and not self._sideExpanded then
+                    self.MainFrame.Visible = false
+                    -- restore logical size for next open
+                    local ww = ScaleData.IsMobile and self:S(360) or self:S(420)
+                    local wh = ScaleData.IsMobile and self:S(520) or self:S(560)
+                    self.MainFrame.Size = UDim2.new(0, ww, 0, wh)
+                end
+            end)
+        end
+    end
+
+    function self:ToggleSide()
+        self:SetSideExpanded(not self._sideExpanded)
+    end
+
+    -- Click to toggle (ignore if drag)
+    self.SideHandle.MouseButton1Click:Connect(function()
+        if self.SideHandle:GetAttribute("WasDragging") then
+            self.SideHandle:SetAttribute("WasDragging", false)
+            return
+        end
+        self:ToggleSide()
+    end)
+
+    self.SideHandle.MouseEnter:Connect(function()
+        self:Tween(self.SideHandle, {BackgroundColor3 = self.Theme.Card}, 0.15)
+        if self._sideChevron then
+            self:Tween(self._sideChevron, {ImageColor3 = self.Theme.AccentHover}, 0.15)
+        end
+    end)
+    self.SideHandle.MouseLeave:Connect(function()
+        self:Tween(self.SideHandle, {BackgroundColor3 = self.Theme.Header}, 0.15)
+        if self._sideChevron then
+            self:Tween(self._sideChevron, {ImageColor3 = self.Theme.Accent}, 0.15)
+        end
+    end)
+
+    -- Drag handle vertically
+    local dragging = false
+    local dragStartY = 0
+    local startScale = 0.5
+
+    self.SideHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStartY = input.Position.Y
+            startScale = self._sideCenterY
+            self.SideHandle:SetAttribute("WasDragging", false)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            local cam = workspace.CurrentCamera
+            local vh = (cam and cam.ViewportSize.Y) or 600
+            local delta = input.Position.Y - dragStartY
+            if math.abs(delta) > 4 then
+                self.SideHandle:SetAttribute("WasDragging", true)
+            end
+            local halfH = HANDLE_H * 0.5
+            local minS = (halfH + 8) / vh
+            local maxS = 1 - minS
+            if minS > maxS then
+                self._sideCenterY = 0.5
+            else
+                self._sideCenterY = math.clamp(startScale + (delta / vh), minS, maxS)
+            end
+            self.SideHandle.Position = UDim2.new(1, -EDGE_PAD, self._sideCenterY, 0)
+            if self._sideExpanded then
+                placePanel()
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    -- subtle intro bounce
+    task.delay(1.0, function()
+        if self.SideHandle and self.SideHandle.Parent then
+            self:Tween(self.SideHandle, {
+                Position = UDim2.new(1, -(EDGE_PAD + 6), self._sideCenterY, 0)
+            }, 0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            task.wait(0.28)
+            if self.SideHandle and self.SideHandle.Parent then
+                self:Tween(self.SideHandle, {
+                    Position = UDim2.new(1, -EDGE_PAD, self._sideCenterY, 0)
+                }, 0.25)
+            end
+        end
+    end)
 end
 
 -- --- FLOATING BUTTON ----------------------------------------------------------
@@ -960,11 +1187,14 @@ function GenesisX:CreateTab(config)
     config = config or {}
     local tabId = config.Name or "Tab"
     local btnSize = self:S(46)
+    local sideMode = self.SideMode == true
+    local tabW = sideMode and (self._sidebarWidth and (self._sidebarWidth - self:S(20)) or self:S(120)) or btnSize
+    local tabH = sideMode and self:S(40) or btnSize
 
     local tabBtn = Instance.new("TextButton")
     tabBtn.Name = tabId .. "Tab"
     tabBtn.BackgroundColor3 = self.Theme.Card
-    tabBtn.Size = UDim2.new(0, btnSize, 0, btnSize)
+    tabBtn.Size = UDim2.new(0, tabW, 0, tabH)
     tabBtn.Text = ""
     tabBtn.AutoButtonColor = false
     tabBtn.ZIndex = 13
@@ -980,9 +1210,15 @@ function GenesisX:CreateTab(config)
         local iconImg = Instance.new("ImageLabel")
         iconImg.Name = "Icon"
         iconImg.BackgroundTransparency = 1
-        iconImg.AnchorPoint = Vector2.new(0.5, 0.5)
-        iconImg.Position = UDim2.new(0.5, 0, 0.5, 0)
-        iconImg.Size = UDim2.new(0, self:S(24), 0, self:S(24))
+        if sideMode then
+            iconImg.AnchorPoint = Vector2.new(0, 0.5)
+            iconImg.Position = UDim2.new(0, self:S(10), 0.5, 0)
+            iconImg.Size = UDim2.new(0, self:S(18), 0, self:S(18))
+        else
+            iconImg.AnchorPoint = Vector2.new(0.5, 0.5)
+            iconImg.Position = UDim2.new(0.5, 0, 0.5, 0)
+            iconImg.Size = UDim2.new(0, self:S(24), 0, self:S(24))
+        end
         iconImg.Image = iconAssetId
         iconImg.ImageColor3 = self.Theme.TextMuted
         iconImg.ScaleType = Enum.ScaleType.Stretch
@@ -1003,7 +1239,25 @@ function GenesisX:CreateTab(config)
         iconLabel.Parent = tabBtn
     end
 
-    -- Tooltip
+    -- SideMode: show tab name beside icon (no hover tooltip needed)
+    if sideMode then
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Name = "TabName"
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Position = UDim2.new(0, self:S(34), 0, 0)
+        nameLbl.Size = UDim2.new(1, -self:S(40), 1, 0)
+        nameLbl.Font = self:GetFontSemibold()
+        nameLbl.Text = tabId
+        nameLbl.TextColor3 = self.Theme.TextMuted
+        nameLbl.TextSize = self:S(12)
+        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLbl.ZIndex = 14
+        nameLbl.Parent = tabBtn
+        tabBtn:SetAttribute("SideMode", true)
+    end
+
+    -- Tooltip (normal mode only)
     local tooltip = Instance.new("TextLabel")
     tooltip.Name = "Tooltip"
     tooltip.BackgroundColor3 = self.Theme.Card
@@ -1025,7 +1279,9 @@ function GenesisX:CreateTab(config)
         if self.CurrentTab ~= tabId then
             self:Tween(tabBtn, {BackgroundColor3 = self.Theme.CardHover}, 0.15)
         end
-        tooltip.Visible = true
+        if not sideMode then
+            tooltip.Visible = true
+        end
     end)
     tabBtn.MouseLeave:Connect(function()
         if self.CurrentTab ~= tabId then
@@ -1162,6 +1418,7 @@ function GenesisX:SelectTab(tabId)
     -- Update sidebar buttons with smooth tween
     for id, data in pairs(self.Tabs) do
         local icon = data.Button:FindFirstChild("Icon")
+        local nameLbl = data.Button:FindFirstChild("TabName")
         if id == tabId then
             self:Tween(data.Button, {BackgroundColor3 = self.Theme.Accent}, 0.2)
             if icon then
@@ -1171,6 +1428,9 @@ function GenesisX:SelectTab(tabId)
                     self:Tween(icon, {ImageColor3 = Color3.new(1, 1, 1)}, 0.2)
                 end
             end
+            if nameLbl and nameLbl:IsA("TextLabel") then
+                self:Tween(nameLbl, {TextColor3 = Color3.new(1, 1, 1)}, 0.2)
+            end
         else
             self:Tween(data.Button, {BackgroundColor3 = self.Theme.Card}, 0.2)
             if icon then
@@ -1179,6 +1439,9 @@ function GenesisX:SelectTab(tabId)
                 elseif icon:IsA("ImageLabel") then
                     self:Tween(icon, {ImageColor3 = self.Theme.TextMuted}, 0.2)
                 end
+            end
+            if nameLbl and nameLbl:IsA("TextLabel") then
+                self:Tween(nameLbl, {TextColor3 = self.Theme.TextMuted}, 0.2)
             end
         end
     end
