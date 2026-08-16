@@ -593,8 +593,16 @@ function GenesisX:CreateWindow(config)
 
     local windowWidth, windowHeight
     if self.SideMode then
-        windowWidth = ScaleData.IsMobile and self:S(360) or self:S(420)
-        windowHeight = ScaleData.IsMobile and self:S(520) or self:S(560)
+        -- Side panel should feel wide/comfortable, not cramped
+        local cam = workspace.CurrentCamera
+        local vw = (cam and cam.ViewportSize.X) or 1366
+        if ScaleData.IsMobile then
+            windowWidth = math.floor(math.clamp(vw * 0.88, 300, 520))
+            windowHeight = ScaleData.IsMobile and self:S(540) or self:S(560)
+        else
+            windowWidth = math.floor(math.clamp(vw * 0.38, 480, 620))
+            windowHeight = self:S(560)
+        end
     else
         windowWidth = ScaleData.IsMobile and self:S(440) or self:S(700)
         windowHeight = ScaleData.IsMobile and self:S(580) or self:S(460)
@@ -769,7 +777,7 @@ function GenesisX:CreateWindow(config)
     end
 
     -- --- SIDEBAR ----------------------------------------------------------------
-    local sidebarWidth = self.SideMode and self:S(140) or self:S(64)
+    local sidebarWidth = self.SideMode and self:S(118) or self:S(64)
     self._sidebarWidth = sidebarWidth
 
     local sidebarWrap = Instance.new("Frame")
@@ -906,9 +914,16 @@ function GenesisX:_CreateSideHandle(config)
 
     -- Panel height adapts to viewport so it never clips
     local function getPanelSize()
-        local vh = math.max(viewportSize().Y, 1)
-        local baseW = ScaleData.IsMobile and self:S(360) or self:S(420)
-        local baseH = ScaleData.IsMobile and self:S(520) or self:S(560)
+        local vs = viewportSize()
+        local vw = math.max(vs.X, 1)
+        local vh = math.max(vs.Y, 1)
+        local baseW
+        if ScaleData.IsMobile then
+            baseW = math.floor(math.clamp(vw * 0.88, 300, 520))
+        else
+            baseW = math.floor(math.clamp(vw * 0.38, 480, 620))
+        end
+        local baseH = ScaleData.IsMobile and self:S(540) or self:S(560)
         local maxH = math.max(220, vh - SCREEN_PAD * 2)
         local h = math.clamp(baseH, 220, maxH)
         return baseW, h
@@ -1040,40 +1055,70 @@ function GenesisX:_CreateSideHandle(config)
     end)
 
     -- Drag handle vertically + save position
+    -- Mobile-friendly: require hold + meaningful move before treating as drag
+    -- so analog/walk touches don't slide the button by accident
     local dragging = false
+    local dragArmed = false -- true only after hold threshold
+    local dragActive = false -- true only after move threshold while armed
     local dragStartY = 0
     local startScale = 0.5
+    local pressClock = 0
+    local HOLD_TO_DRAG = 0.28 -- seconds of hold before drag can start
+    local MOVE_TO_DRAG = 14 -- pixels before counting as drag
 
     self.SideHandle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
+            dragArmed = false
+            dragActive = false
             dragStartY = input.Position.Y
             startScale = self._sideCenterY
+            pressClock = os.clock()
             self.SideHandle:SetAttribute("WasDragging", false)
+
+            -- arm drag after hold (does not move yet)
+            task.delay(HOLD_TO_DRAG, function()
+                if dragging and not dragActive then
+                    dragArmed = true
+                end
+            end)
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
         if not dragging then return end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local vh = math.max(viewportSize().Y, 1)
             local delta = input.Position.Y - dragStartY
-            if math.abs(delta) > 4 then
+            local heldLongEnough = (os.clock() - pressClock) >= HOLD_TO_DRAG or dragArmed
+
+            -- Desktop mouse: allow drag sooner (smaller hold), mobile touch uses full hold
+            local isTouch = input.UserInputType == Enum.UserInputType.Touch
+            local moveNeed = isTouch and MOVE_TO_DRAG or 8
+            local holdNeed = isTouch and HOLD_TO_DRAG or 0.12
+            heldLongEnough = (os.clock() - pressClock) >= holdNeed or dragArmed
+
+            if heldLongEnough and math.abs(delta) >= moveNeed then
+                dragActive = true
+                dragArmed = true
                 self.SideHandle:SetAttribute("WasDragging", true)
             end
-            self._sideCenterY = clampHandleScale(startScale + (delta / vh))
-            placeHandle()
-            -- panel stays centered when open (does not follow handle)
+
+            if dragActive then
+                local vh = math.max(viewportSize().Y, 1)
+                self._sideCenterY = clampHandleScale(startScale + (delta / vh))
+                placeHandle()
+            end
         end
     end)
 
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging then
-                -- persist handle Y
+            if dragging and dragActive then
                 self:_SaveConfigFile("sidehandle_y.json", self._sideCenterY)
             end
             dragging = false
+            dragArmed = false
+            dragActive = false
         end
     end)
 
@@ -1424,13 +1469,15 @@ function GenesisX:CreateTab(config)
 
         local layout = Instance.new("UIListLayout")
         layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Padding = UDim.new(0, self:S(8))
+        layout.Padding = UDim.new(0, self.SideMode and self:S(10) or self:S(8))
         layout.Parent = scrollFrame
 
         local padding = Instance.new("UIPadding")
-        padding.PaddingLeft   = UDim.new(0, self:S(8))
-        padding.PaddingRight  = UDim.new(0, self:S(8))
+        local sidePad = self.SideMode and self:S(12) or self:S(8)
+        padding.PaddingLeft   = UDim.new(0, sidePad)
+        padding.PaddingRight  = UDim.new(0, sidePad)
         padding.PaddingBottom = UDim.new(0, self:S(10))
+        padding.PaddingTop    = UDim.new(0, self.SideMode and self:S(4) or 0)
         padding.Parent = scrollFrame
 
         layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
