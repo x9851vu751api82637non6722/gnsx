@@ -871,11 +871,59 @@ function GenesisX:_CreateSideHandle(config)
     local HANDLE_H = self:S(96)
     local EDGE_PAD = self:S(12)
     local GAP = self:S(10)
+    local SCREEN_PAD = 10
 
     self._sideHandleW = HANDLE_W
     self._sideEdgePad = EDGE_PAD
     self._sideGap = GAP
-    self._sideCenterY = 0.5
+
+    local function viewportSize()
+        local cam = workspace.CurrentCamera
+        if cam then return cam.ViewportSize end
+        return Vector2.new(1366, 768)
+    end
+
+    local function safeClamp(value, minV, maxV)
+        if minV > maxV then
+            return (minV + maxV) * 0.5
+        end
+        return math.clamp(value, minV, maxV)
+    end
+
+    -- Load last handle position (0..1 scale Y)
+    local savedY = self:_LoadConfigFile("sidehandle_y.json", 0.5)
+    if type(savedY) ~= "number" then savedY = 0.5 end
+    savedY = math.clamp(savedY, 0.05, 0.95)
+    self._sideCenterY = savedY
+
+    local function clampHandleScale(scale)
+        local vh = math.max(viewportSize().Y, 1)
+        local half = HANDLE_H * 0.5
+        local minS = (half + SCREEN_PAD) / vh
+        local maxS = 1 - minS
+        return safeClamp(scale, minS, maxS)
+    end
+
+    -- Panel height adapts to viewport so it never clips
+    local function getPanelSize()
+        local vh = math.max(viewportSize().Y, 1)
+        local baseW = ScaleData.IsMobile and self:S(360) or self:S(420)
+        local baseH = ScaleData.IsMobile and self:S(520) or self:S(560)
+        local maxH = math.max(220, vh - SCREEN_PAD * 2)
+        local h = math.clamp(baseH, 220, maxH)
+        return baseW, h
+    end
+
+    -- Panel always opens vertically centered (and clamped), independent of handle Y
+    local function getPanelCenterScale(panelH)
+        local vh = math.max(viewportSize().Y, 1)
+        local half = panelH * 0.5
+        local minS = (half + SCREEN_PAD) / vh
+        local maxS = 1 - minS
+        return safeClamp(0.5, minS, maxS)
+    end
+
+    self._sideCenterY = clampHandleScale(self._sideCenterY)
 
     -- Floating chevron handle on the right edge
     self.SideHandle = Instance.new("TextButton")
@@ -911,26 +959,30 @@ function GenesisX:_CreateSideHandle(config)
     chevron.Parent = self.SideHandle
     self._sideChevron = chevron
 
-    -- Position MainFrame relative to handle when expanded
-    local function placePanel()
+    local function placeHandle()
+        self._sideCenterY = clampHandleScale(self._sideCenterY)
+        self.SideHandle.Position = UDim2.new(1, -EDGE_PAD, self._sideCenterY, 0)
+    end
+
+    local function placePanelCentered(panelH)
         if not self.MainFrame then return end
         local offset = EDGE_PAD + HANDLE_W + GAP
-        self.MainFrame.Position = UDim2.new(1, -offset, self._sideCenterY, 0)
+        local cy = getPanelCenterScale(panelH)
+        self.MainFrame.AnchorPoint = Vector2.new(1, 0.5)
+        self.MainFrame.Position = UDim2.new(1, -offset, cy, 0)
+        return cy
     end
 
     function self:SetSideExpanded(state)
         self._sideExpanded = state and true or false
         if not self.MainFrame then return end
 
+        local w, h = getPanelSize()
+        local offset = EDGE_PAD + HANDLE_W + GAP
+
         if self._sideExpanded then
-            placePanel()
+            placePanelCentered(h)
             self.MainFrame.Visible = true
-            -- expand from zero width feel
-            local targetSize = self.MainFrame.Size
-            local w = targetSize.X.Offset
-            local h = targetSize.Y.Offset
-            if w <= 0 then w = self:S(420) end
-            if h <= 0 then h = self:S(560) end
             self.MainFrame.Size = UDim2.new(0, 0, 0, h)
             self:Tween(self.MainFrame, {
                 Size = UDim2.new(0, w, 0, h)
@@ -942,7 +994,6 @@ function GenesisX:_CreateSideHandle(config)
                 self._sideHandleStroke.Transparency = 0.12
             end
         else
-            local h = self.MainFrame.Size.Y.Offset
             self:Tween(self.MainFrame, {
                 Size = UDim2.new(0, 0, 0, h)
             }, 0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -955,9 +1006,7 @@ function GenesisX:_CreateSideHandle(config)
             task.delay(0.3, function()
                 if self.MainFrame and not self._sideExpanded then
                     self.MainFrame.Visible = false
-                    -- restore logical size for next open
-                    local ww = ScaleData.IsMobile and self:S(360) or self:S(420)
-                    local wh = ScaleData.IsMobile and self:S(520) or self:S(560)
+                    local ww, wh = getPanelSize()
                     self.MainFrame.Size = UDim2.new(0, ww, 0, wh)
                 end
             end)
@@ -990,7 +1039,7 @@ function GenesisX:_CreateSideHandle(config)
         end
     end)
 
-    -- Drag handle vertically
+    -- Drag handle vertically + save position
     local dragging = false
     local dragStartY = 0
     local startScale = 0.5
@@ -1007,32 +1056,42 @@ function GenesisX:_CreateSideHandle(config)
     UserInputService.InputChanged:Connect(function(input)
         if not dragging then return end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local cam = workspace.CurrentCamera
-            local vh = (cam and cam.ViewportSize.Y) or 600
+            local vh = math.max(viewportSize().Y, 1)
             local delta = input.Position.Y - dragStartY
             if math.abs(delta) > 4 then
                 self.SideHandle:SetAttribute("WasDragging", true)
             end
-            local halfH = HANDLE_H * 0.5
-            local minS = (halfH + 8) / vh
-            local maxS = 1 - minS
-            if minS > maxS then
-                self._sideCenterY = 0.5
-            else
-                self._sideCenterY = math.clamp(startScale + (delta / vh), minS, maxS)
-            end
-            self.SideHandle.Position = UDim2.new(1, -EDGE_PAD, self._sideCenterY, 0)
-            if self._sideExpanded then
-                placePanel()
-            end
+            self._sideCenterY = clampHandleScale(startScale + (delta / vh))
+            placeHandle()
+            -- panel stays centered when open (does not follow handle)
         end
     end)
 
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                -- persist handle Y
+                self:_SaveConfigFile("sidehandle_y.json", self._sideCenterY)
+            end
             dragging = false
         end
     end)
+
+    -- Reclamp on resolution change
+    local function reclampAll()
+        placeHandle()
+        if self._sideExpanded and self.MainFrame then
+            local _, h = getPanelSize()
+            placePanelCentered(h)
+            local w = getPanelSize()
+            -- keep size fitted
+            local ww, wh = getPanelSize()
+            self.MainFrame.Size = UDim2.new(0, ww, 0, wh)
+        end
+    end
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(reclampAll)
+    end
 
     -- subtle intro bounce
     task.delay(1.0, function()
@@ -1050,7 +1109,6 @@ function GenesisX:_CreateSideHandle(config)
     end)
 end
 
--- --- FLOATING BUTTON ----------------------------------------------------------
 function GenesisX:_CreateFloatingButton(config)
     config = config or {}
     local btnSize = self:S(64)
